@@ -34,11 +34,12 @@
 
         .container {
             display: flex;
-            flex-direction: column;
+            flex-direction: row;
             gap: 20px;
-            max-width: 900px;
+            max-width: 1200px;
             width: 100%;
-            align-items: center;
+            flex-wrap: wrap;
+            justify-content: center;
         }
 
         .card {
@@ -46,11 +47,25 @@
             border-radius: 15px;
             box-shadow: 0 4px 20px var(--shadow-light);
             padding: 30px;
-            width: 100%;
+            flex: 1;
+            min-width: 300px;
+            max-width: 550px;
             display: flex;
             flex-direction: column;
             align-items: center;
             text-align: center;
+        }
+
+        @media (max-width: 768px) {
+            .container {
+                flex-direction: column;
+                align-items: center;
+            }
+            .card {
+                max-width: 100%;
+                min-width: unset;
+                width: 100%;
+            }
         }
         
         h1, h2 {
@@ -131,6 +146,47 @@
             margin: 0;
             line-height: 1.5;
             word-wrap: break-word;
+        }
+
+        .ticket-grid {
+            display: grid;
+            grid-template-columns: repeat(9, 1fr);
+            gap: 5px;
+            width: 100%;
+            margin-top: 20px;
+            border: 2px solid var(--border-color);
+            border-radius: 10px;
+            padding: 10px;
+        }
+
+        .ticket-cell {
+            background-color: #f0f0f0;
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+            font-weight: bold;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+
+        .ticket-cell:hover {
+            background-color: #e0e0e0;
+        }
+
+        .ticket-cell.marked {
+            background-color: var(--accent-color);
+            color: white;
+            text-decoration: line-through;
+            transform: scale(1.05);
+        }
+
+        .ticket-cell.empty {
+            background-color: transparent;
+            border: 1px solid transparent;
+            pointer-events: none;
         }
         
         .controls {
@@ -314,9 +370,20 @@
             <div id="housieBoard" class="board-grid">
                 <!-- Numbers 1 to 90 will be generated here by JavaScript -->
             </div>
-
             <div class="controls" style="margin-top: 20px;">
                 <button id="claimWinBtn" class="btn btn-primary">Claim a Win!</button>
+            </div>
+        </div>
+
+        <!-- Player Ticket Section -->
+        <div class="card ticket-card">
+            <h2>Your Ticket</h2>
+            <div class="controls">
+                <button id="generateTicketBtn" class="btn btn-secondary">Generate New Ticket</button>
+            </div>
+            <div id="playerTicket" class="ticket-grid">
+                <!-- Ticket cells will be generated here -->
+                <p style="grid-column: 1 / -1; text-align: center; color: #999;">Click 'Generate New Ticket' to begin.</p>
             </div>
         </div>
     </div>
@@ -330,12 +397,12 @@
         <div id="rulesContent" class="rules-content">
             <p>Housie, also known as Bingo or Tambola, is a game of chance played with numbers from 1 to 90. Here's how to play:</p>
             <ul>
-                <li><strong>Draw Numbers:</strong> The caller (this screen) draws a random number from 1 to 90.</li>
-                <li><strong>Mark Your Ticket:</strong> If the number called is on your ticket, you can manually mark it.</li>
-                <li><strong>Claim a Win:</strong> When a player completes a winning pattern on their **physical ticket**, they press the **"Claim a Win!"** button.</li>
+                <li><strong>Draw Numbers:</strong> The caller (that's the left side of this screen) draws a random number from 1 to 90.</li>
+                <li><strong>Mark Your Ticket:</strong> If the number called is on your ticket, you can click on it to mark it.</li>
+                <li><strong>Claim a Win:</strong> When you complete a winning pattern, press the **"Claim a Win!"** button.</li>
                 <li><strong>Winning Patterns:</strong> The game checks for the following patterns:
                     <ul>
-                        <li><strong>Early 5:</strong> The first five numbers marked on a ticket.</li>
+                        <li><strong>Early 5:</strong> The first player to mark any five numbers on their ticket.</li>
                         <li><strong>Top Line:</strong> All numbers in the first row are marked.</li>
                         <li><strong>Middle Line:</strong> All numbers in the second row are marked.</li>
                         <li><strong>Bottom Line:</strong> All numbers in the third row are marked.</li>
@@ -390,7 +457,9 @@
             const currentNumberDisplay = document.getElementById('currentNumberDisplay');
             const historyDisplay = document.getElementById('historyDisplay');
             const housieBoard = document.getElementById('housieBoard');
+            const generateTicketBtn = document.getElementById('generateTicketBtn');
             const claimWinBtn = document.getElementById('claimWinBtn');
+            const playerTicketGrid = document.getElementById('playerTicket');
             const modal = document.getElementById('alertModal');
             const modalTitle = document.getElementById('modalTitle');
             const modalMessage = document.getElementById('modalMessage');
@@ -405,6 +474,7 @@
             // --- Game State Variables ---
             let allNumbers = [];
             let calledNumbers = new Set();
+            let playerTicket = [];
 
             // --- Game Setup and Initialization ---
             function initializeGame() {
@@ -414,6 +484,8 @@
                 historyDisplay.textContent = 'No numbers called yet.';
                 createBoard();
                 drawNumberBtn.disabled = false;
+                playerTicketGrid.innerHTML = '<p style="grid-column: 1 / -1; text-align: center; color: #999;">Click \'Generate New Ticket\' to begin.</p>';
+                playerTicket = [];
             }
 
             function createBoard() {
@@ -457,6 +529,103 @@
                 historyDisplay.textContent = historyArray.join(', ');
             }
 
+            // --- Player Ticket Logic ---
+            function generateTicket() {
+                playerTicket = createHousieTicket();
+                renderTicket(playerTicket);
+            }
+
+            function renderTicket(ticket) {
+                playerTicketGrid.innerHTML = '';
+                ticket.flat().forEach(number => {
+                    const cell = document.createElement('div');
+                    cell.classList.add('ticket-cell');
+                    if (number === null) {
+                        cell.classList.add('empty');
+                    } else {
+                        cell.textContent = number;
+                        
+                        // Add click listener for manual marking, regardless of calledNumbers state
+                        cell.addEventListener('click', () => {
+                             cell.classList.toggle('marked');
+                        });
+                    }
+                    playerTicketGrid.appendChild(cell);
+                });
+            }
+
+            /**
+             * A simplified algorithm to create a valid Housie ticket.
+             * Generates a 3x9 ticket with 5 numbers per row.
+             * @returns {Array<Array<number | null>>} A 3x9 ticket array.
+             */
+            function createHousieTicket() {
+                const ticket = Array.from({ length: 3 }, () => Array(9).fill(null));
+                const columnRanges = [[1, 10], [11, 20], [21, 30], [31, 40], [41, 50], [51, 60], [61, 70], [71, 80], [81, 90]];
+                
+                // Get one number from each column initially to ensure each column has at least one number.
+                const columnNumbers = [];
+                for (let i = 0; i < 9; i++) {
+                    const [min, max] = columnRanges[i];
+                    const num = Math.floor(Math.random() * (max - min + 1)) + min;
+                    columnNumbers.push(num);
+                }
+
+                const allNumbers = Array.from({ length: 90 }, (_, i) => i + 1);
+                const remainingNumbers = allNumbers.filter(num => !columnNumbers.includes(num));
+                shuffleArray(remainingNumbers);
+
+                // Add the initial numbers to the ticket
+                for (let i = 0; i < 9; i++) {
+                    const colIndex = i;
+                    const num = columnNumbers[i];
+                    const rowIndex = Math.floor(Math.random() * 3);
+                    ticket[rowIndex][colIndex] = num;
+                }
+                
+                // Fill the rest of the ticket with random numbers
+                let numCount = 9;
+                while (numCount < 15) {
+                    const num = remainingNumbers.pop();
+                    const colIndex = Math.floor((num - 1) / 10);
+                    const rowIndex = Math.floor(Math.random() * 3);
+
+                    if (ticket[rowIndex][colIndex] === null) {
+                        let rowCount = ticket[rowIndex].filter(n => n !== null).length;
+                        let colCount = ticket.filter(row => row[colIndex] !== null).length;
+                        if (rowCount < 5 && colCount < 3) {
+                            ticket[rowIndex][colIndex] = num;
+                            numCount++;
+                        }
+                    }
+                }
+
+                // Sort numbers within each row for a valid ticket display
+                for (let row = 0; row < 3; row++) {
+                    const sortedRow = ticket[row].filter(n => n !== null).sort((a, b) => a - b);
+                    let sortedIndex = 0;
+                    for (let col = 0; col < 9; col++) {
+                        if (ticket[row][col] !== null) {
+                            ticket[row][col] = sortedRow[sortedIndex];
+                            sortedIndex++;
+                        }
+                    }
+                }
+                
+                return ticket;
+            }
+
+            /**
+             * Shuffles an array in place using the Fisher-Yates algorithm.
+             * @param {Array} array - The array to shuffle.
+             */
+            function shuffleArray(array) {
+                for (let i = array.length - 1; i > 0; i--) {
+                    const j = Math.floor(Math.random() * (i + 1));
+                    [array[i], array[j]] = [array[j], array[i]];
+                }
+            }
+
             // --- Modal and Event Handlers ---
             function showMessage(title, message) {
                 modalTitle.textContent = title;
@@ -476,6 +645,7 @@
             // --- Event Listeners ---
             drawNumberBtn.addEventListener('click', drawNumber);
             resetBtn.addEventListener('click', initializeGame);
+            generateTicketBtn.addEventListener('click', generateTicket);
             claimWinBtn.addEventListener('click', showWinModal);
 
             closeModalBtn.addEventListener('click', () => { modal.style.display = 'none'; });
